@@ -399,26 +399,3 @@ class raster:
         
         return (xmin,ymin,xmax,ymax)
         
-
-
-
-
-
-
-if __name__=='__main__':
-    ################ TEST CODE ###############
-    i0=raster('/Users/seongsu/Desktop/GRWT_TEST/coco20160313_20160314-20160601_20160602.tif')
-    print(i0.nodata)
-    i0.write('/Users/seongsu/Desktop/GRWT_TEST/coco20160313_20160314-20160601_20160602_copy.tif')
-    i1=i0.copy() 
-    i1.write('/Users/seongsu/Desktop/GRWT_TEST/coco20160313_20160314-20160601_20160602_copy2.tif')
-
-
-
-
-
-
-
-
-
-
