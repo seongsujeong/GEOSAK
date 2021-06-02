@@ -14,5 +14,5 @@
     - New modules/codes planned.
 
 4. How to use
-    - Make sure you have GDAL and its python modules installed. It can be easily installed by using 
+    - Make sure you have GDAL and its python modules installed. It can be easily installed by using conda.
     - Just clone or download the codes, and add the path to $PYTHONPATH. That's it!
