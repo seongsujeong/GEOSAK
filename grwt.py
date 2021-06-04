@@ -357,11 +357,6 @@ class raster:
                 output=None
 
 
-
-
-
-
-
     def copy(self):
         out=raster()
         out.z=self.z
@@ -399,3 +394,35 @@ class raster:
         
         return (xmin,ymin,xmax,ymax)
         
+
+#Load the magnitude and phase raster files separately, and give out the raster in complex number
+#To be used in some DInSAR data processing results
+def magphase2complex(magnitude_filename_or_raster,phase_filename_or_raster,isRadian=True):
+    if type(magnitude_filename_or_raster)==str:
+        raster_mag=raster(magnitude_filename_or_raster)
+    else:
+        raster_mag=magnitude_filename_or_raster
+
+    if type(phase_filename_or_raster)==str:
+        raster_phase=raster(magnitude_filename_or_raster)
+    else:
+        raster_phase=magnitude_filename_or_raster
+
+    if raster_mag.nx==raster_phase.nx and raster_mag.ny==raster_phase.ny:
+        raster_out=raster_mag.copy()
+        raster_out.z=(np.cos(raster_phase.z)*raster_mag.z) + (np.sin(raster_phase.z)*raster_mag.z)*1.0j
+    else:
+        print('ERROR: grwt.magphase2complex() - Input rasters\' dimensions are not same: {}(mag) vs. {}(phase)'.format(raster_mag.z.shape,raster_phase.z.shape))
+    return raster_out
+
+
+#Supporting functions
+def plot(raster_in,range=None,cmap=None):
+    if np.iscomplexobj(raster_in.z):
+        #plot the compelx number 
+        pass
+
+    else:
+        #plot the real numbered array
+        pass
+
