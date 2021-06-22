@@ -17,6 +17,14 @@ import os
 import sys
 import argparse
 
+# Fields in GAMMA par files that contains image shape information
+# format: (one of the lines in the header) - width,nlines
+par_imageshapeinfo={
+    'Interferogram and Image Offset Parameter File':['offset_estimation_range_samples','offset_estimation_azimuth_samples'],
+    'Gamma Interferometric SAR Processor (ISP) - Image Parameter File':['range_samples','azimuth_lines'],
+    'Gamma DIFF&GEO DEM/MAP parameter file':['width','nlines'],
+    'Gamma DIFF&GEO Processing Parameters':['map_width','map_azimuth_lines']
+}
 
 
 #Default raster options dfor each fiel format
@@ -51,7 +59,7 @@ class raster:
     @filename.setter #NOTE: Setting the filename will cause re-loading the raster object
     def filename(self,filename_raster):
         self._filename=filename_raster
-        self.load_rasterobj()
+        #self.load_rasterobj() #NOTE: Loading the data in this stage might cause disruption when trying to create a new raster file. Suggest not to call this member.
 
 
     def load_rasterobj(self):
@@ -416,13 +424,66 @@ def magphase2complex(magnitude_filename_or_raster,phase_filename_or_raster,isRad
     return raster_out
 
 
-#Supporting functions
-def plot(raster_in,range=None,cmap=None):
-    if np.iscomplexobj(raster_in.z):
-        #plot the compelx number 
-        pass
 
-    else:
-        #plot the real numbered array
-        pass
+
+
+#parse GAMMA par file into dict
+#NOTE:
+# - The output dict has a pair whose key is 'header.' This contains the lines at the beginning of the par file
+def par2dict(filename_par):
+
+    fields_do_not_split=[
+        'title',
+        'datum_name',
+        'ellipsoid_name',
+        'datum_country_list'
+    ]
+    
+    def parse_string(str_in): #nested function
+        #functionality: Convert str_in into variable of appropriate data type i.e. int, float, and string
+        if str_in.replace('-','').isnumeric():
+            #str_in is integer
+            var_out=int(str_in)
+        elif str_in.replace('-','').replace('+','').replace('.','').replace('e','').replace('E','').isnumeric(): #regular floating point expression e.g. -24.5254
+            #str_in is floating point
+            var_out=float(str_in)
+        else:
+            var_out=str(str_in) #NOTE this casting is not that meaningful...
+        return var_out
+
+    
+    dict_out={}
+    dict_out['header']=[]
+    with open(filename_par,'r') as fin:
+        lines_in=fin.read().split('\n')
+
+    for line in lines_in:
+        if line.replace(' ','')=='': #blank line
+            continue
+        elif ':' in line:
+            #parse the string
+            key_and_val=line.split(':')
+
+            
+            if not key_and_val[0] in dict_out.keys(): #create key if does not exist in the dict (i.e. first encounter)
+                dict_out[key_and_val[0]]=None
+            #Couple of special fields and values
+            if key_and_val[0] in fields_do_not_split:
+                dict_out[key_and_val[0]]=':'.join(key_and_val[1:]).lstrip(' ')
+            else:
+                seg_val=key_and_val[1].split()
+                if len(seg_val)==1:
+                    dict_out[key_and_val[0]]=parse_string(seg_val[0])
+                else: #series of values
+                    if dict_out[key_and_val[0]]==None:
+                        dict_out[key_and_val[0]]=[]
+                        for val_str in seg_val:
+                            dict_out[key_and_val[0]].append(parse_string(val_str))
+
+        else:
+            #put the string in header
+            dict_out['header'].append(line)
+
+    return dict_out
+
 
