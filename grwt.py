@@ -17,14 +17,7 @@ import os
 import sys
 import argparse
 
-# Fields in GAMMA par files that contains image shape information
-# format: (one of the lines in the header) - width,nlines
-par_imageshapeinfo={
-    'Interferogram and Image Offset Parameter File':['offset_estimation_range_samples','offset_estimation_azimuth_samples'],
-    'Gamma Interferometric SAR Processor (ISP) - Image Parameter File':['range_samples','azimuth_lines'],
-    'Gamma DIFF&GEO DEM/MAP parameter file':['width','nlines'],
-    'Gamma DIFF&GEO Processing Parameters':['map_width','map_azimuth_lines']
-}
+
 
 
 #Default raster options dfor each fiel format
@@ -78,7 +71,7 @@ class raster:
                     self._ny=None
                     self._nz=None
                     self._GeoTransform=None
-                    self._projection=None
+                    self._Projection=None
                     self._nodata=None
                     
                     #self._str_driver=self._rasterobj.GetDriver().GetDescription()
@@ -186,15 +179,14 @@ class raster:
     @z.setter
     def z(self,arr_in,reshape='auto'): #In case the user manually brings the data array
         #NOTE options in reshaping the multiband data: True, False, 'auto'
-        if len(arr_in.shape)==2: #single-band raster
+        if arr_in.ndim==2: #single-band raster
             self._z=arr_in
             self.nx=self._z.shape[1]
             self.ny=self._z.shape[0]
-            self.nz=1
+            self._nz=1
 
-        elif len(arr_in.shape)==3: #multi-band raster:
+        elif arr_in.ndim==3: #multi-band raster:
             #determine whether or not to reshape 'arr_in'
-            
             vec_arr_shape=arr_in.shape
             if arr_in.shape[0]<(vec_arr_shape[1]+vec_arr_shape[2])/2: #smaller 1st element in the shape vector - possible GDAL raster style
                 flag_need_to_reshape=False
@@ -345,20 +337,20 @@ class raster:
                 output.SetProjection(self.Projection)
                 
                 #write the array and the file
-                #if self.nz==1:
-                #    band_out=output.GetRasterBand(1)
-                #    if self.nodata!=None:
-                #        band_out.SetNoDataValue(self.nodata)
-                #    band_out.WriteArray(self.z)
-                # 
-                #else: #multiple band raster
-                for i in range(self.nz):
-                    print('writing: band {} of {}'.format(i+1,self.nz))
-                    if self.nodata is not None:
-                        output.GetRasterBand(i+1).SetNoDataValue(self.nodata[i])
-                        output.GetRasterBand(i+1).WriteArray(self.z[i])
-                    else:
-                        output.GetRasterBand(i+1).WriteArray(self.z[i])
+                if self.nz==1:
+                    band_out=output.GetRasterBand(1)
+                    if self.nodata!=None:
+                        band_out.SetNoDataValue(self.nodata)
+                    band_out.WriteArray(self.z)
+                
+                else: #multiple band raster
+                    for i in range(self.nz):
+                        print('writing: band {} of {}'.format(i+1,self.nz))
+                        if self.nodata is not None:
+                            output.GetRasterBand(i+1).SetNoDataValue(self.nodata[i])
+                            output.GetRasterBand(i+1).WriteArray(self.z[i])
+                        else:
+                            output.GetRasterBand(i+1).WriteArray(self.z[i])
 
                 #finalize
                 output.FlushCache()
@@ -424,9 +416,6 @@ def magphase2complex(magnitude_filename_or_raster,phase_filename_or_raster,isRad
     return raster_out
 
 
-
-
-
 #parse GAMMA par file into dict
 #NOTE:
 # - The output dict has a pair whose key is 'header.' This contains the lines at the beginning of the par file
@@ -460,6 +449,8 @@ def par2dict(filename_par):
     for line in lines_in:
         if line.replace(' ','')=='': #blank line
             continue
+        elif 'END OF' in line: # "The last line" indicator
+            continue
         elif ':' in line:
             #parse the string
             key_and_val=line.split(':')
@@ -487,3 +478,91 @@ def par2dict(filename_par):
     return dict_out
 
 
+#Returns EPSG number from gcpar
+#NOTE - only works for polar stereographic for now...
+#TODO - Extend it for UTM and GCS (e.g. EGS84)
+def epsg_from_gcpar(dict_par):
+    epsg_out=None #Value to return when EPSG detection did not work
+    if dict_par['DEM_projection']=='PS':
+        if dict_par['PS_secant_lat'][0]==-71.0 and dict_par['PS_central_meridian'][0]==-0.0:
+            epsg_out=3031 #Polar stereographic South
+        elif dict_par['PS_secant_lat'][0]==70.0 and dict_par['PS_central_meridian'][0]==-45.0:
+            epsg_out=3413 #Polar stereographic South
+
+    elif dict_par['DEM_projection']=='UTM':
+        zone_number=dict_par['projection_zone']
+        #Choose if the projection should be UTM-north or UTM-south
+        #NOTE: In practical perspective, it is not so meaningful - UTM-north and UTM-south use the same reprojeciton parameters.
+        #calculate the image extent
+        #x0=dict_par['corner_east']
+        ymax=dict_par['corner_north']
+        #x1=x0+dict_par['post_east']*dict_par['width']
+        ymin=ymax+dict_par['post_north']*dict_par['nlines']
+        if ymin>0 and ymax>0:   #northern
+            epsg_out=32600+zone_number
+        elif ymax<0 and ymin<0: #southern
+            epsg_out=32700+zone_number
+        else: #equator crosses the image
+            if abs(ymin)>ymax:  #consider as southern
+                epsg_out=32700+zone_number
+            else:               #consider as northern
+                epsg_out=32600+zone_number
+    
+    return epsg_out
+
+
+#Loads GAMMA raster arrays (SLC, MLI, etc.) as grwt.raster instance.
+def load_gamma_raster(filename_data,filename_par,dtype=None):
+    # Fields in GAMMA par files that contains image shape information
+    # format: (one of the lines in the header) - width, nlines, data format
+    par_imageshapeinfo={
+        'Interferogram and Image Offset Parameter File':['offset_estimation_range_samples','offset_estimation_azimuth_samples',None],
+        'Gamma Interferometric SAR Processor (ISP) - Image Parameter File':['range_samples','azimuth_lines','image_format'],
+        'Gamma DIFF&GEO DEM/MAP parameter file':['width','nlines','data_format'],
+        'Gamma DIFF&GEO Processing Parameters':['map_width','map_azimuth_lines',None]
+    }
+    dict_datatype={
+        'REAL*4':np.float32,
+        'REAL*8':np.float64,
+        'FCOMPLEX':np.complex64
+    }
+    
+    #retrieve the image size
+    dict_par=par2dict(filename_par)
+    fields_format=par_imageshapeinfo[dict_par['header'][-1]]
+    nx=dict_par[fields_format[0]]
+    ny=dict_par[fields_format[1]]
+
+    if dtype==None:
+        datatype_in=dict_datatype[dict_par[fields_format[2]]]
+    else:
+        datatype_in=dtype
+
+    
+    try:
+        raster_out=raster()
+        raster_out.z=np.fromfile(filename_data,dtype=datatype_in).byteswap().reshape((ny,nx))
+
+        if 'Gamma DIFF&GEO DEM/MAP parameter file' in dict_par['header']: #special treatment for gcpar
+            raster_out.Projection=epsg_from_gcpar(dict_par)
+            raster_out.GeoTransform=(dict_par['corner_east'][0], dict_par['post_east'][0], 0, dict_par['corner_north'][0], 0, dict_par['post_north'][0])
+
+        return raster_out
+    except:
+        print('ERROR: grwt.load_gamma_raster() - cannot load the data file')
+        return None
+    
+    
+    
+
+
+
+
+
+if __name__=='__main__':
+    #TEST CODES - it should work opnly on the machines that I'm writing this code.
+    HOMEDIR=os.getenv('HOME')
+    grin=load_gamma_raster('{}/Desktop/Tidal_correction_test/LARSEN-C/3d_vel_off_xy20190109.notide.geo'.format(HOMEDIR),\
+                           '{}/Desktop/Tidal_correction_test/LARSEN-C/DEM_gc_par'.format(HOMEDIR),np.complex64)
+    grin.write('{}/Desktop/Tidal_correction_test/LARSEN-C/3d_vel_off_xy20190109.notide.geo.tif'.format(HOMEDIR))
+    
