@@ -16,6 +16,7 @@ import numpy as np
 import os
 import sys
 import argparse
+import subprocess
 
 
 
@@ -519,6 +520,7 @@ def load_gamma_raster(filename_data,filename_par,dtype=None):
         'Interferogram and Image Offset Parameter File':['offset_estimation_range_samples','offset_estimation_azimuth_samples',None],
         'Gamma Interferometric SAR Processor (ISP) - Image Parameter File':['range_samples','azimuth_lines','image_format'],
         'Gamma DIFF&GEO DEM/MAP parameter file':['width','nlines','data_format'],
+        'GAMMA Differential Interferometry (DIFF) DEM parameter file':['width','nlines','data_format'],
         'Gamma DIFF&GEO Processing Parameters':['map_width','map_azimuth_lines',None]
     }
     dict_datatype={
@@ -541,6 +543,7 @@ def load_gamma_raster(filename_data,filename_par,dtype=None):
     
     try:
         raster_out=raster()
+        raster_out.str_driver='GAMMA'
         raster_out.z=np.fromfile(filename_data,dtype=datatype_in).byteswap().reshape((ny,nx))
 
         if 'Gamma DIFF&GEO DEM/MAP parameter file' in dict_par['header']: #special treatment for gcpar
@@ -551,9 +554,34 @@ def load_gamma_raster(filename_data,filename_par,dtype=None):
     except:
         print('ERROR: grwt.load_gamma_raster() - cannot load the data file')
         return None
+        
     
-    
-    
+#Couple of utilities
+def clip_to_reference(filename_src,filename_ref,filename_out,resampling='cubic',epsg_out=3031,dryrun=False):
+    #TODO: Implement it in more elegant way (i.e. do not rely on shell commands)
+    form_command_gdalwarp='gdalwatp -r {RS} -tr {RES_X} {RES_Y} -te {XMIN} {YMIN} {XMAX} {YMAX} -t_srs epsg:{EPSG}, {IN} {OUT}'
+    raster_src=raster(filename_src)
+    raster_ref=raster(filename_ref)
+
+    xmin=raster_ref.GeoTransform[0]
+    xmax=raster_ref.GeoTransform[0]+raster_ref.GeoTransform[1]*raster_ref.nx
+    ymax=raster_ref.GeoTransform[3]
+    ymin=raster_ref.GeoTransform[3]+raster_ref.GeoTransform[5]*raster_ref.ny
+
+    str_command_gdalwarp=form_command_gdalwarp.format(RS=resampling,
+                                                      RES_X=raster_ref.GeoTransform[1], RES_Y=abs(raster_ref.GeoTransform[1]),
+                                                      XMIN=xmin, YMIN=ymin, XMAX=xmax, YMAX=ymax,
+                                                      EPSG=epsg_out) #TODO: soft-code "EPSG=epsg_out"
+
+
+    if dryrun:
+        print(str_command_gdalwarp)
+        rtnval=None
+    else:
+        rtnval=subprocess.call(str_command_gdalwarp,shell=True)
+
+    return None
+
 
 
 
@@ -565,4 +593,3 @@ if __name__=='__main__':
     grin=load_gamma_raster('{}/Desktop/Tidal_correction_test/LARSEN-C/3d_vel_off_xy20190109.notide.geo'.format(HOMEDIR),\
                            '{}/Desktop/Tidal_correction_test/LARSEN-C/DEM_gc_par'.format(HOMEDIR),np.complex64)
     grin.write('{}/Desktop/Tidal_correction_test/LARSEN-C/3d_vel_off_xy20190109.notide.geo.tif'.format(HOMEDIR))
-    
