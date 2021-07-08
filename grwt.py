@@ -243,7 +243,8 @@ class raster:
             self._Projection=SR.ExportToWkt()
         elif type(epsg_or_filename_or_wkt_or_raster)==raster: #Another raster instance
             self._Projection=epsg_or_filename_or_wkt_or_raster.Projection
-        elif 'PROJCS' in epsg_or_filename_or_wkt_or_raster: #WKT string
+        #elif 'PROJCS' in epsg_or_filename_or_wkt_or_raster: #WKT string
+        elif '[' in epsg_or_filename_or_wkt_or_raster: #WKT string - TODO: Think about better and more general way of detecting the WKT for projection
             self._Projection=epsg_or_filename_or_wkt_or_raster
         else:
             rasterobj_ref=open(epsg_or_filename_or_wkt_or_raster)
@@ -396,6 +397,10 @@ class raster:
         return (xmin,ymin,xmax,ymax)
         
 
+
+
+######################################## Some utilities ########################################
+
 #Load the magnitude and phase raster files separately, and give out the raster in complex number
 #To be used in some DInSAR data processing results
 def magphase2complex(magnitude_filename_or_raster,phase_filename_or_raster,isRadian=True):
@@ -415,6 +420,84 @@ def magphase2complex(magnitude_filename_or_raster,phase_filename_or_raster,isRad
     else:
         print('ERROR: grwt.magphase2complex() - Input rasters\' dimensions are not same: {}(mag) vs. {}(phase)'.format(raster_mag.z.shape,raster_phase.z.shape))
     return raster_out
+
+
+#clip the raster object with the pixel coordinates provided
+def clip_raster_by_imgcoord(raster_in,extent_px,raster_out=None):
+    # extent_px: 4-element array (e.g. list, tuple, or numpy array) Order is the same as gdalwarp utility (xmin,ymin,xmax,ymax)
+    # NOTE - leave raster_out as None when you want the function to return the clipped raster
+    #      - Provide the filename into raster_out when you want the raster saved in file system
+    #
+
+    if type(raster_in)==str:
+        raster_src=raster(raster_in)
+    else:
+        raster_src=raster_in
+        
+    raster_tgt=raster()
+
+    raster_tgt.nx=extent_px[2]-extent_px[0]+1
+    raster_tgt.ny=extent_px[3]-extent_px[1]+1
+    #raster_tgt.nz=raster_src.nz #NOTE: It should be set automatically by the following section in this function
+
+    if raster_src.nz>1: #multiband
+        raster_tgt.z=raster_src.z[:,extent_px[1]:extent_px[3]+1, extent_px[0]:extent_px[2]+1].copy()
+    else: #singleband
+        raster_tgt.z=raster_src.z[extent_px[1]:extent_px[3]+1, extent_px[0]:extent_px[2]+1].copy()
+
+    #bring the projection information
+    raster_tgt.Projection=raster_src.Projection
+    dx=raster_src.GeoTransform[1]
+    dy=raster_src.GeoTransform[5]
+    x0=raster_src.GeoTransform[0]+dx*extent_px[0]
+    y0=raster_src.GeoTransform[3]+dy*extent_px[1]
+    
+    raster_tgt.GeoTransform=(x0,dx,0,y0,0,dy)
+
+    if raster_out is None:
+        return raster_tgt
+    
+    else:
+        raster_tgt.write(raster_out)
+    
+
+
+   
+def clip_to_reference(filename_src,filename_ref,filename_out,resampling='cubic',epsg_out=3031,dryrun=False):
+    #TODO: Implement it in more elegant way (i.e. do not rely on shell commands)
+    form_command_gdalwarp='gdalwatp -r {RS} -tr {RES_X} {RES_Y} -te {XMIN} {YMIN} {XMAX} {YMAX} -t_srs epsg:{EPSG}, {IN} {OUT}'
+    raster_src=raster(filename_src)
+    raster_ref=raster(filename_ref)
+
+    xmin=raster_ref.GeoTransform[0]
+    xmax=raster_ref.GeoTransform[0]+raster_ref.GeoTransform[1]*raster_ref.nx
+    ymax=raster_ref.GeoTransform[3]
+    ymin=raster_ref.GeoTransform[3]+raster_ref.GeoTransform[5]*raster_ref.ny
+
+    str_command_gdalwarp=form_command_gdalwarp.format(RS=resampling,
+                                                      RES_X=raster_ref.GeoTransform[1], RES_Y=abs(raster_ref.GeoTransform[1]),
+                                                      XMIN=xmin, YMIN=ymin, XMAX=xmax, YMAX=ymax,
+                                                      EPSG=epsg_out) #TODO: soft-code "EPSG=epsg_out"
+
+
+    if dryrun:
+        print(str_command_gdalwarp)
+        rtnval=None
+    else:
+        rtnval=subprocess.call(str_command_gdalwarp,shell=True)
+
+    return None
+
+
+
+
+
+
+
+
+######################################## GAMMA support ########################################
+
+
 
 
 #parse GAMMA par file into dict
@@ -555,40 +638,13 @@ def load_gamma_raster(filename_data,filename_par,dtype=None):
         print('ERROR: grwt.load_gamma_raster() - cannot load the data file')
         return None
         
-    
-#Couple of utilities
-def clip_to_reference(filename_src,filename_ref,filename_out,resampling='cubic',epsg_out=3031,dryrun=False):
-    #TODO: Implement it in more elegant way (i.e. do not rely on shell commands)
-    form_command_gdalwarp='gdalwatp -r {RS} -tr {RES_X} {RES_Y} -te {XMIN} {YMIN} {XMAX} {YMAX} -t_srs epsg:{EPSG}, {IN} {OUT}'
-    raster_src=raster(filename_src)
-    raster_ref=raster(filename_ref)
-
-    xmin=raster_ref.GeoTransform[0]
-    xmax=raster_ref.GeoTransform[0]+raster_ref.GeoTransform[1]*raster_ref.nx
-    ymax=raster_ref.GeoTransform[3]
-    ymin=raster_ref.GeoTransform[3]+raster_ref.GeoTransform[5]*raster_ref.ny
-
-    str_command_gdalwarp=form_command_gdalwarp.format(RS=resampling,
-                                                      RES_X=raster_ref.GeoTransform[1], RES_Y=abs(raster_ref.GeoTransform[1]),
-                                                      XMIN=xmin, YMIN=ymin, XMAX=xmax, YMAX=ymax,
-                                                      EPSG=epsg_out) #TODO: soft-code "EPSG=epsg_out"
-
-
-    if dryrun:
-        print(str_command_gdalwarp)
-        rtnval=None
-    else:
-        rtnval=subprocess.call(str_command_gdalwarp,shell=True)
-
-    return None
-
-
-
+ 
 
 
 
 if __name__=='__main__':
     #TEST CODES - it should work opnly on the machines that I'm writing this code.
+
     HOMEDIR=os.getenv('HOME')
     grin=load_gamma_raster('{}/Desktop/Tidal_correction_test/LARSEN-C/3d_vel_off_xy20190109.notide.geo'.format(HOMEDIR),\
                            '{}/Desktop/Tidal_correction_test/LARSEN-C/DEM_gc_par'.format(HOMEDIR),np.complex64)
