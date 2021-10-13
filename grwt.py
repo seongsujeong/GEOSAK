@@ -347,7 +347,7 @@ class raster:
                 
                 else: #multiple band raster
                     for i in range(self.nz):
-                        print('writing: band {} of {}'.format(i+1,self.nz))
+                        #print('writing: band {} of {}'.format(i+1,self.nz))
                         if self.nodata is not None:
                             output.GetRasterBand(i+1).SetNoDataValue(self.nodata[i])
                             output.GetRasterBand(i+1).WriteArray(self.z[i])
