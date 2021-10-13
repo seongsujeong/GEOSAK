@@ -38,7 +38,7 @@ class raster:
         self._GeoTransform=None
         self._Projection=None
         self._nodata=None
-        self._option=None
+        self._option=[]
         self.isArea=True
         self.verbose=False #make the output message a bit more informative. Could be useful for debugging.
 
@@ -139,9 +139,6 @@ class raster:
             self._nodata=tuple([number_or_list_or_tuple]*self.nz)
         
 
-
-
-
     #on-demand processing of the metadata and the data
     @property
     def nx(self): #raster width
@@ -155,7 +152,6 @@ class raster:
     def nx(self,nx_in): #To be used when user wants to manually input the raster size; 
         self._nx=nx_in
 
-
     @property
     def ny(self): #raster width
         if self._ny==None:
@@ -167,7 +163,6 @@ class raster:
     @ny.setter
     def ny(self,ny_in): #To be used when user wants to manually input the raster size; 
         self._ny=ny_in
-
 
     @property
     def z(self):
@@ -273,10 +268,11 @@ class raster:
 
     @property
     def option(self):
-        if self._option==None:
-            return []
-        else:
-            return self._option
+        return self._option
+
+    @option.setter
+    def option(self,list_option):
+        self._option=list_option
 
     def go_bigtiff(self,force=False): #Check if the raster needs to be "bigtiff mode" in case of geotiff
         try:
