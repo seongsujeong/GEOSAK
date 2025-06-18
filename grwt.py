@@ -38,12 +38,12 @@ class raster:
         self._GeoTransform = None
         self._Projection = None
         self._nodata = None
-        self._option=[]
-        self.isArea=True
-        self.verbose=False  # make the output message a bit more informative. Could be useful for debugging.
+        self._option = []
+        self.isArea = True
+        self.verbose = False  # make the output message a bit more informative. Could be useful for debugging.
 
-        if type(filename_raster)==str:
-            self.filename=filename_raster
+        if type(filename_raster) == str:
+            self.filename = filename_raster
             #self.load_rasterobj(self.filename)
 
     @property
@@ -51,8 +51,8 @@ class raster:
         return self._filename
 
     @filename.setter  # NOTE: Setting the filename will cause re-loading the raster object
-    def filename(self,filename_raster):
-        self._filename=filename_raster
+    def filename(self, filename_raster):
+        self._filename = filename_raster
         #self.load_rasterobj()  # NOTE: Loading the data in this stage might cause disruption when trying to create a new raster file. Suggest not to call this member.
 
 
