@@ -1,17 +1,19 @@
-#GRWT - GDAL Raster Wrapper and Toolkit
+'''
+GRWT - GDAL Raster Wrapper and Toolkit
 
+Functionality
+ - Simplify I/O procedure of geospatial raster data using GDAL
+ - provide simple toolkit to visualize explore, and manipulate the raster
 
-#Functionality
-# - Simplify I/O procedure of geospatial raster data using GDAL
-# - provide simple toolkit to visualize explore, and manipulate the raster
-#
-# Derived from grup.py, an internal code for UCI data processing pipeline
-#  - Major difference: On-demand data loading
-#
-
+ Derived from grup.py, an internal code for UCI data processing pipeline
+  - Major difference: On-demand data loading
+    - More pythonic way of defining the class members (i.e. using @property decorator)
+    - More modularized code structure
+    - Added GAMMA raster support
+'''
 
 from numpy.core.numeric import outer
-from osgeo import gdal,ogr,osr
+from osgeo import gdal, ogr, osr
 import numpy as np
 import os
 import sys
@@ -19,11 +21,8 @@ import argparse
 import subprocess
 
 
-
-
-#Default raster options dfor each fiel format
-default_raster_options={'GTiff':['COMPRESS=LZW']}
-default_format='GTiff'
+default_raster_options = {'GTiff':["COMPRESS=DEFLATE", "PREDICTOR=1", "ZLEVEL=1"]}
+default_format = 'GTiff'
 
 class raster:
     def __init__(self,filename_raster=None):
@@ -53,17 +52,20 @@ class raster:
     @filename.setter  # NOTE: Setting the filename will cause re-loading the raster object
     def filename(self, filename_raster):
         self._filename = filename_raster
-        #self.load_rasterobj()  # NOTE: Loading the data in this stage might cause disruption when trying to create a new raster file. Suggest not to call this member.
+        #self.load_rasterobj()
+        # NOTE: Loading the data in this stage might cause disruption when
+        # trying to create a new raster file. Suggest not to call this member.
 
 
     def load_rasterobj(self):
         self._rasterobj = None  # de-reference the raster object if already loaded
         if self._filename != None:
             if os.path.isfile(self._filename) or \
-                ('vsi' in self._filename[:10]) or ('vsigzip' in self._filename[:10]) or ('vsitar' in self._filename[:10]) or \
-                (self._filename.startswith('NETCDF')): #i.e. gdal-supported raster format
+                ('vsi' in self._filename[:10]) or \
+                 ('vsigzip' in self._filename[:10]) or ('vsitar' in self._filename[:10]) or \
+                (self._filename.startswith('NETCDF')):  # i.e. gdal-supported raster format
                 try:
-                    self._rasterobj=gdal.Open(self._filename)
+                    self._rasterobj = gdal.Open(self._filename)
 
                     #reset the on-demand menbers
                     self._str_driver = None
@@ -75,12 +77,13 @@ class raster:
                     self._Projection = None
                     self._nodata = None
 
-                    #self._str_driver=self._rasterobj.GetDriver().GetDescription()
                 except:
-                    print('ERROR: Not supported by GDAL - grwt.raster.load_rasterobj(), filename={}'.format(self._filename))
+                    print('ERROR: Not supported by GDAL - '
+                          f'grwt.raster.load_rasterobj(), filename={self._filename}')
                     #try to see if the file is npy array
             elif self._filename.startswith('gamma:'): #
-                #NOTE: string format for GAMMA raster: gamma:[filename]:[par file]:dataype[e.g. float32, complex64, uint16, ...]
+                # NOTE: string format for GAMMA raster:
+                # gamma:[filename]:[par file]:dataype[e.g. float32, complex64, uint16, ...]
                 self._str_driver = 'gamma'
 
                 filename_data = self._filename.split(':')[1]
@@ -89,7 +92,7 @@ class raster:
                 #TODO: keep implementing the gamma loading routine
 
             elif self._filename == None:
-                print(print('ERROR - Filename was not defined: grwt.raster.load_rasterobj()'.format(self._filename)))
+                print(f'ERROR - Filename was not defined: grwt.raster.load_rasterobj()')
 
     @property
     def str_driver(self):
@@ -97,7 +100,7 @@ class raster:
             if self._rasterobj == None:
                 self.load_rasterobj()
             try:
-                self._str_driver=self._rasterobj.GetDriver().GetDescription()
+                self._str_driver = self._rasterobj.GetDriver().GetDescription()
             except:
                 self._str_driver = None
 
@@ -137,7 +140,6 @@ class raster:
 
         else:
             self._nodata = tuple([number_or_list_or_tuple] * self.nz)
-
 
     #on-demand processing of the metadata and the data
     @property
@@ -184,7 +186,8 @@ class raster:
         elif arr_in.ndim == 3: #multi-band raster:
             #determine whether or not to reshape 'arr_in'
             vec_arr_shape = arr_in.shape
-            if arr_in.shape[0] < (vec_arr_shape[1] + vec_arr_shape[2]) / 2: #smaller 1st element in the shape vector - possible GDAL raster style
+            # smaller 1st element in the shape vector - possible GDAL raster style
+            if arr_in.shape[0] < (vec_arr_shape[1] + vec_arr_shape[2]) / 2:
                 flag_need_to_reshape = False
             else:
                 flag_need_to_reshape = True
@@ -212,7 +215,8 @@ class raster:
         return self._GeoTransform
 
     @GeoTransform.setter
-    def GeoTransform(self, list_or_tuple): #To be used when the user wants to set the geotransform parameter
+    # To be used when the user wants to set the geotransform parameter
+    def GeoTransform(self, list_or_tuple):
         if type(list_or_tuple) == list:
             self._GeoTransform = tuple(list_or_tuple)
         else:
@@ -236,10 +240,10 @@ class raster:
             SR = osr.SpatialReference()
             SR.ImportFromEPSG(epsg_or_filename_or_wkt_or_raster)
             self._Projection = SR.ExportToWkt()
-        elif type(epsg_or_filename_or_wkt_or_raster) == raster: #Another raster instance
+        elif type(epsg_or_filename_or_wkt_or_raster) == raster:  # Another raster instance
             self._Projection = epsg_or_filename_or_wkt_or_raster.Projection
-        #elif 'PROJCS' in epsg_or_filename_or_wkt_or_raster: #WKT string
-        elif '[' in epsg_or_filename_or_wkt_or_raster: #WKT string - TODO: Think about better and more general way of detecting the WKT for projection
+        elif '[' in epsg_or_filename_or_wkt_or_raster: # WKT string
+            # TODO: Think about better and more general way of detecting the WKT for projection
             self._Projection = epsg_or_filename_or_wkt_or_raster
         else:
             rasterobj_ref = open(epsg_or_filename_or_wkt_or_raster)
@@ -274,13 +278,14 @@ class raster:
     def option(self, list_option):
         self._option = list_option
 
-    def go_bigtiff(self, force=False): #Check if the raster needs to be "bigtiff mode" in case of geotiff
+    def go_bigtiff(self, force=False):
+        # Check if the raster needs to be "bigtiff mode" in case of geotiff
         try:
             size_raster = self.z.dtype.itemsize * self.nx * self.ny
         except:
             size_raster = -1
 
-        if size_raster >= 4 * (2 ** 30) or force: #4GB
+        if size_raster >= 4 * (2 ** 30) or force: # 4GB
             return True
         elif size_raster < 0: #cannot calculate the array size in bytes
             print('grup.raster.go_bigtiff() - cannot calculate the raster size in byte.')
@@ -414,7 +419,8 @@ def magphase2complex(magnitude_filename_or_raster, phase_filename_or_raster, isR
         raster_out = raster_mag.copy()
         raster_out.z = (np.cos(raster_phase.z) * raster_mag.z) + (np.sin(raster_phase.z) * raster_mag.z) * 1.0j
     else:
-        print('ERROR: grwt.magphase2complex() - Input rasters\' dimensions are not same: {}(mag) vs. {}(phase)'.format(raster_mag.z.shape,raster_phase.z.shape))
+        print('ERROR: grwt.magphase2complex() - Input rasters\' dimensions are not the same: '
+              f'{raster_mag.z.shape}(mag) vs. {raster_phase.z.shape}(phase)')
     return raster_out
 
 
@@ -457,9 +463,11 @@ def clip_raster_by_imgcoord(raster_in, extent_px, raster_out=None):
         raster_tgt.write(raster_out)
 
 
-def clip_to_reference(filename_src, filename_ref, filename_out, resampling='cubic', epsg_out=3031, dryrun=False):
+def clip_to_reference(filename_src, filename_ref, filename_out,
+                      resampling='cubic', epsg_out=3031, dryrun=False):
     #TODO: Implement it in more elegant way (i.e. do not rely on shell commands)
-    form_command_gdalwarp = 'gdalwarp -r {RS} -tr {RES_X} {RES_Y} -te {XMIN} {YMIN} {XMAX} {YMAX} -t_srs epsg:{EPSG} {IN} {OUT}'
+    form_command_gdalwarp = ('gdalwarp -r {RS} -tr {RES_X} {RES_Y} -te '
+                             '{XMIN} {YMIN} {XMAX} {YMAX} -t_srs epsg:{EPSG} {IN} {OUT}')
     raster_src = raster(filename_src)
     raster_ref = raster(filename_ref)
 
@@ -469,9 +477,10 @@ def clip_to_reference(filename_src, filename_ref, filename_out, resampling='cubi
     ymin = raster_ref.GeoTransform[3] + raster_ref.GeoTransform[5] * raster_ref.ny
 
     str_command_gdalwarp = form_command_gdalwarp.format(RS=resampling,
-                                                      RES_X=raster_ref.GeoTransform[1], RES_Y=abs(raster_ref.GeoTransform[1]),
+                                                      RES_X=raster_ref.GeoTransform[1],
+                                                      RES_Y=abs(raster_ref.GeoTransform[1]),
                                                       XMIN=xmin, YMIN=ymin, XMAX=xmax, YMAX=ymax,
-                                                      EPSG=epsg_out) #TODO: soft-code "EPSG=epsg_out"
+                                                      EPSG=epsg_out) # TODO: soft-code "EPSG=epsg_out"
 
 
     if dryrun:
@@ -483,15 +492,7 @@ def clip_to_reference(filename_src, filename_ref, filename_out, resampling='cubi
     return None
 
 
-
-
-
-
-
-
 ######################################## GAMMA support ########################################
-
-
 
 
 #parse GAMMA par file into dict
@@ -630,13 +631,3 @@ def load_gamma_raster(filename_data, filename_par, dtype=None):
     except:
         print('ERROR: grwt.load_gamma_raster() - cannot load the data file')
         return None
-
-
-
-if __name__ == '__main__':
-    #TEST CODES - it should work only on the machines that I'm writing this code.
-
-    HOMEDIR = os.getenv('HOME')
-    grin = load_gamma_raster('{}/Desktop/Tidal_correction_test/LARSEN-C/3d_vel_off_xy20190109.notide.geo'.format(HOMEDIR),\
-                           '{}/Desktop/Tidal_correction_test/LARSEN-C/DEM_gc_par'.format(HOMEDIR), np.complex64)
-    grin.write('{}/Desktop/Tidal_correction_test/LARSEN-C/3d_vel_off_xy20190109.notide.geo.tif'.format(HOMEDIR))

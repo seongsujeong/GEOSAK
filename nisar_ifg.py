@@ -31,16 +31,9 @@ def compute_coherence(ref_gslc_path, sec_gslc_path, coh_out_path, nlooks_x=8, nl
                        gtf_gslc[4],
                        gtf_gslc[5] * nlooks_y)
 
-    # pre-allocate summation arrays
-    s1s2conj = np.zeros(multilook_shape, dtype=np.complex64)
-    s1abs = np.zeros(multilook_shape)
-    s2abs = np.zeros(multilook_shape)
-
     coherence = compute_coherence_from_arr(ref_gslc_arr, sec_gslc_arr, nlooks_x, nlooks_y)
 
     # save the GSLC ifg
-
-
     drv_out = gdal.GetDriverByName('GTiff')
     ds_out = drv_out.Create(coh_out_path,
                             multilook_shape[1],
