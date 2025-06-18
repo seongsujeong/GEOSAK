@@ -67,7 +67,7 @@ class raster:
                 try:
                     self._rasterobj = gdal.Open(self._filename)
 
-                    #reset the on-demand menbers
+                    #reset the on-demand members
                     self._str_driver = None
                     self._z = None
                     self._nx = None
@@ -204,8 +204,6 @@ class raster:
             self._ny = self._z.shape[1]
             self._nz = self._z.shape[0]
 
-
-
     @property
     def GeoTransform(self):
         if self._GeoTransform == None:
@@ -248,7 +246,6 @@ class raster:
         else:
             rasterobj_ref = open(epsg_or_filename_or_wkt_or_raster)
             self._Projection = rasterobj_ref.GetProjection()
-
 
     @property
     def nz(self): #number of bands in raster
@@ -482,7 +479,6 @@ def clip_to_reference(filename_src, filename_ref, filename_out,
                                                       XMIN=xmin, YMIN=ymin, XMAX=xmax, YMAX=ymax,
                                                       EPSG=epsg_out) # TODO: soft-code "EPSG=epsg_out"
 
-
     if dryrun:
         print(str_command_gdalwarp)
         rtnval = None
@@ -594,11 +590,21 @@ def load_gamma_raster(filename_data, filename_par, dtype=None):
     # Fields in GAMMA par files that contains image shape information
     # format: (one of the lines in the header) - width, nlines, data format
     par_imageshapeinfo = {
-        'Interferogram and Image Offset Parameter File': ['offset_estimation_range_samples', 'offset_estimation_azimuth_samples', None],
-        'Gamma Interferometric SAR Processor (ISP) - Image Parameter File': ['range_samples', 'azimuth_lines', 'image_format'],
-        'Gamma DIFF&GEO DEM/MAP parameter file': ['width', 'nlines', 'data_format'],
-        'GAMMA Differential Interferometry (DIFF) DEM parameter file': ['width', 'nlines', 'data_format'],
-        'Gamma DIFF&GEO Processing Parameters': ['map_width', 'map_azimuth_lines', None]
+        'Interferogram and Image Offset Parameter File': ['offset_estimation_range_samples',
+                                                          'offset_estimation_azimuth_samples',
+                                                          None],
+        'Gamma Interferometric SAR Processor (ISP) - Image Parameter File': ['range_samples',
+                                                                             'azimuth_lines',
+                                                                             'image_format'],
+        'Gamma DIFF&GEO DEM/MAP parameter file': ['width',
+                                                  'nlines',
+                                                  'data_format'],
+        'GAMMA Differential Interferometry (DIFF) DEM parameter file': ['width',
+                                                                        'nlines',
+                                                                        'data_format'],
+        'Gamma DIFF&GEO Processing Parameters': ['map_width',
+                                                 'map_azimuth_lines',
+                                                 None]
     }
     dict_datatype = {
         'REAL*4': np.float32,
@@ -617,7 +623,6 @@ def load_gamma_raster(filename_data, filename_par, dtype=None):
     else:
         datatype_in=dtype
 
-
     try:
         raster_out = raster()
         raster_out.str_driver = 'GAMMA'
@@ -625,7 +630,12 @@ def load_gamma_raster(filename_data, filename_par, dtype=None):
 
         if 'Gamma DIFF&GEO DEM/MAP parameter file' in dict_par['header']: #special treatment for gcpar
             raster_out.Projection = epsg_from_gcpar(dict_par)
-            raster_out.GeoTransform = (dict_par['corner_east'][0], dict_par['post_east'][0], 0, dict_par['corner_north'][0], 0, dict_par['post_north'][0])
+            raster_out.GeoTransform = (dict_par['corner_east'][0],
+                                       dict_par['post_east'][0],
+                                       0,
+                                       dict_par['corner_north'][0],
+                                       0,
+                                       dict_par['post_north'][0])
 
         return raster_out
     except:
